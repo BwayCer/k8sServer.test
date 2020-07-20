@@ -1,0 +1,267 @@
+#!/bin/bash
+# 文本樣板腳本
+
+
+##shStyle ###
+
+
+set -e
+
+_PWD=$PWD
+_br="
+"
+
+
+##shStyle fColor-easy
+
+
+_fN=`printf "\e[00m"`
+_fRedB=`printf "\e[31;01m"`
+_fGreB=`printf "\e[32;01m"`
+_fYelB=`printf "\e[33;01m"`
+
+
+##shStyle 介面函式
+
+
+fnShTemplate_helpTxt="\
+文本樣板腳本
+
+# 範例：
+#   $ cat ./value.txt
+#   不符合 \`/^[A-Za-z0-9-]\+ /\` 格式者皆可視為註解
+#   user=Cer
+#   description=\\\nlink to https://bwaycer.github.io/about
+#   $ echo \"Hello {{user}}{{description}}\" |
+#       ./shTemplate --template - --args-file ./value.txt --argu \'user=Bway\'
+#   Hello Bway
+#   link to https://bwaycer.github.io/about
+\n
+用法： [選項]\n\n
+選項：\n
+  -t, --template <dirPath|filePath|->   指定樣板文件。
+                                        (\"-\" 使用標準輸入導入文件。)
+                                        (使用 \"<dirPath>\" 選項時要求文件名使用
+                                         \".temp\" 或 \".template\" 為副檔名。)
+  -a, --argu <key=value>                個別設定參數。
+  -A, --args-file <filePath>            由文件批量設定參數。
+  -o, --output <dirPath|filePath>       指定導出的目錄或文件路徑。
+                                        (若 \`--template <dirPath>\`，則路徑判斷為目錄；
+                                         若 \`--template <filePath>\`，則路徑判斷為文件
+                                         。)
+  -h, --help                            幫助。
+"
+
+fnShTemplate__fileName="shTemplate"
+
+fnShTemplate_logTxt_parseOptionErr3="找不到 \"%s\" 選項。"
+fnShTemplate_logTxt_parseOptionErr4="\"%s\" 不符合 \"%s\" 選項的預期值。"
+fnShTemplate_logTxt_notFoundTemplate="找不到樣板。"
+fnShTemplate_logTxt_notSetValueList="未提供參數值。"
+
+fnShTemplate_regexKeyOnig="[A-Za-z0-9-]+"
+fnShTemplate_regexKey="[A-Za-z0-9-]\+"
+fnShTemplate_parseArguCmdList=(sed "s/=/ /")
+fnShTemplate_defaultArgsFileName="value.txt"
+fnShTemplate_defaultOutputPath="$PWD/shtt"
+fnShTemplate_findTemplateCmdPartList=(-name "*.temp" -o -name "*.template")
+
+
+fnSh_shTemplate() {
+    [ $# -eq 0 ] && {
+        echo -e "$fnShTemplate_helpTxt$_br"
+        return
+    }
+
+    local opt_templateType=""
+    local opt_template=""
+    local opt_valueList=""
+    local opt_output=""
+
+    while [ -n "y" ]
+    do
+        case "$1" in
+            -t | --template )
+                if [ "$2" == "-" ] && [ ! -t 0 ]; then
+                    opt_templateType="stdin"
+                    opt_template=`while read pipeData; do echo "$pipeData"; done <&0`
+                    shift 2
+                elif [ -f "$2" ]; then
+                    opt_templateType="filePath"
+                    opt_template=`cat "$2"`
+                    shift 2
+                elif [ -d "$2" ]; then
+                    opt_templateType="dirPath"
+                    opt_template="$2"
+                    shift 2
+                else
+                    fnLogErr "$fnShTemplate__fileName" \
+                        "$fnShTemplate_logTxt_parseOptionErr4" "$2" "$1"
+                    return 1
+                fi
+                ;;
+            -a | --argu )
+                if [[ ! "$2" =~ ^$fnShTemplate_regexKeyOnig=.+$ ]]; then
+                    fnLogErr "$fnShTemplate__fileName" \
+                        "$fnShTemplate_logTxt_parseOptionErr4" "$2" "$1"
+                    return 1
+                fi
+
+                opt_valueList+="$_br`"${fnShTemplate_parseArguCmdList[@]}" <<< "$2"`"
+                shift 2
+                ;;
+            -A | --args-file )
+                if [ -z "$2" ] || [ ! -f "$2" ]; then
+                    fnLogErr "$fnShTemplate__fileName" \
+                        "$fnShTemplate_logTxt_parseOptionErr4" "$2" "$1"
+                    return 1
+                fi
+
+                opt_valueList+="$_br`cat "$2"`"
+                shift 2
+                ;;
+            -o | --output )
+                if [ -z "$2" ]; then
+                    fnLogErr "$fnShTemplate__fileName" \
+                        "$fnShTemplate_logTxt_parseOptionErr4" "$2" "$1"
+                    return 1
+                fi
+
+                opt_output+="$2"
+                shift 2
+                ;;
+            -h | --help )
+                echo -e "$fnShTemplate_helpTxt$_br"
+                return
+                ;;
+            -- ) shift; break ;;
+            * )
+                [[ "$1" =~ ^- ]] || break
+                fnLogErr "$fnShTemplate__fileName" \
+                    "$fnShTemplate_logTxt_parseOptionErr3" "$1"
+                return 1
+                ;;
+        esac
+    done
+
+    if [ -z "$opt_templateType" ]; then
+        fnLogErr "$fnShTemplate__fileName" "$fnShTemplate_logTxt_notFoundTemplate"
+        return 1
+    fi
+
+    local defaultArgsFilePath
+    if [ "$opt_templateType" == "dirPath" ]; then
+        defaultArgsFilePath="$opt_template/$fnShTemplate_defaultArgsFileName"
+        if [ -f "$defaultArgsFilePath" ]; then
+            opt_valueList="`
+                cat "$defaultArgsFilePath" | "${fnShTemplate_parseArguCmdList[@]}"
+            `$_br$opt_valueList"
+        fi
+    fi
+    if [ -z "$opt_valueList" ]; then
+        fnLogErr "$fnShTemplate__fileName" "$fnShTemplate_logTxt_notSetValueList"
+        return 1
+    fi
+
+    local outputPath
+    local tmpOutputPath outputFileTxt findTxt
+    local outputFilePath outputFilePath_dirname outputFilePath_notExt
+    local valueList=`grep "^$fnShTemplate_regexKey " <<< "$opt_valueList"`
+
+    case "$opt_templateType" in
+        stdin )
+            echo "`fnReplaceTemplate "$opt_template" "$valueList"`"
+            ;;
+        filePath )
+            [ -n "$opt_output" ] \
+                && outputPath="$opt_output" \
+                || outputPath="${fnShTemplate_defaultOutputPath}.txt"
+            echo "`fnReplaceTemplate "$opt_template" "$valueList"`" > "$outputPath"
+            ;;
+        dirPath )
+            [ -n "$opt_output" ] \
+                && outputPath="$opt_output" \
+                || outputPath="$fnShTemplate_defaultOutputPath"
+
+            tmpOutputPath="/tmp/shtt"
+
+            [ -e "$tmpOutputPath" ] && rm -rf "$tmpOutputPath"
+            cd "$opt_template"
+            find . -path "$outputPath" -prune -o \
+                \( "${fnShTemplate_findTemplateCmdPartList[@]}" \) -print |
+                while read templateFilePath
+                do
+                    outputFileTxt=`
+                        fnReplaceTemplate "$(cat "$templateFilePath")" "$valueList"
+                    `
+                    outputFilePath="$tmpOutputPath/$templateFilePath"
+                    outputFilePath_dirname=`dirname "$outputFilePath"`
+                    outputFilePath_notExt=`sed 's/\.\w\+$//' <<< "$outputFilePath"`
+                    [ -d "$outputFilePath_dirname" ] ||
+                        mkdir -p "$outputFilePath_dirname"
+                    echo "$outputFileTxt" > "$outputFilePath_notExt"
+                done
+
+            cd "$tmpOutputPath"
+            findTxt=`find . -type f`
+            cd "$_PWD"
+            while read filePath
+            do
+                outputFilePath="$outputPath/$filePath"
+                outputFilePath_dirname=`dirname "$outputFilePath"`
+                [ -d "$outputFilePath_dirname" ] ||
+                    mkdir -p "$outputFilePath_dirname"
+                mv "$tmpOutputPath/$filePath" "$outputFilePath"
+            done <<< "$findTxt"
+            ;;
+    esac
+}
+
+
+##shStyle 函式庫
+
+
+fnLogErr() {
+    local fileName="$1"
+    local msg="$2"
+    shift 2
+    printf "$_fRedB[%s]: $msg$_fN\n" "$fileName" "$@" >&2
+}
+
+fnReplaceTemplate() {
+    local template="$1"
+    local valueList="$2"
+
+    local needArgsList=`
+        ( grep -o "{{$fnShTemplate_regexKey}}" |
+            sort |
+            uniq |
+            grep -o "$fnShTemplate_regexKey"
+        ) <<< "$template"
+    `
+
+    local arguValue
+    local outputFileTxt="$template"
+    while read key
+    do
+        arguValue=`
+            ( grep "^$key " |
+              tail -1 |
+              cut -d " " -f 2- |
+              sed 's/\\\\/\\\\\\\/g' |
+              sed 's/\//\\\\\//g'
+            ) <<< "$valueList"
+        `
+        arguValue=`echo -e "$arguValue"`
+        outputFileTxt=`sed "s/{{$key}}/$arguValue/g" <<< "$outputFileTxt"`
+    done <<< "$needArgsList"
+
+    echo "$outputFileTxt"
+}
+
+
+##shStyle ###
+
+
+fnSh_shTemplate "$@"
+

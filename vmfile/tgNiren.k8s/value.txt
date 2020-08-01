@@ -1,0 +1,5 @@
+
+appName=tg-niren
+pvcContainer=pvc-container
+envfileName=tg-niren-envfile
+

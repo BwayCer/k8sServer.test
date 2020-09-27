@@ -1,0 +1,22 @@
+
+http:
+  routers:
+    dashboard:
+      rule: "Host(`dashboard.xuan.tw`)"
+      service: dashboard
+
+    router0:
+      rule: "Host(`test.xuan.tw`)"
+      service: my-service
+
+  services:
+    dashboard:
+      loadBalancer:
+        servers:
+          - url: http://0.0.0.0:8211
+
+    my-service:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:8080
+

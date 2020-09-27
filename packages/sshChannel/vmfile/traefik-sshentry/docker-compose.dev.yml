@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  traefik-sshentry:
+    image: local/ssh-channel/dev/traefik-sshentry:v2.3
+    build:
+      context: .
+      dockerfile: ./docker/traefik-sshentry.dev.dockerfile
+    restart: always
+    ports:
+      # The HTTP/HTTPs port
+      - "80:80"
+      # - "443:443"
+      # ssh port
+      - "8022:22"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../mntfile/traefik/:/app/
+    secrets:
+      - source: sshfile
+        target: /tmp/tercel/sshfile
+        mode: 0400
+
+secrets:
+  sshfile:
+    file: ../../secretfile/sshfile/
+

@@ -1,0 +1,15 @@
+
+---
+## PersistentVolumeClaim
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{envfileName}}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 128Mi
+

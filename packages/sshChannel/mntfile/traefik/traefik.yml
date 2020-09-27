@@ -1,0 +1,21 @@
+
+log:
+  filePath: /app/all.log
+  format: json
+
+api:
+  insecure: true
+  debug: true
+
+entryPoints:
+  web:
+    address: ":80"
+  # websecure:
+    # address: ":443"
+  traefik:
+    address: ":8211"
+
+providers:
+  file:
+    filename: /app/dynamic.yml
+
